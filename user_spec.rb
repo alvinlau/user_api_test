@@ -75,7 +75,7 @@ describe 'users api endpoint' do
     users = get_users
     expect(users).to include(a_hash_including(firstName: 'mickey', lastName: 'mouse'))
     matches = users.find_all { |user| user >= {firstName: 'mickey', lastName: 'mouse'} }
-    expect(matches.size).to be(1), 'could find added user via first and last name'
+    expect(matches.size).to be(1), 'found added user via first and last name more than once'
 
     # verify details on the added user
     match = matches[0]
@@ -105,7 +105,7 @@ describe 'users api endpoint' do
     post endpt, user
 
     users = get_users
-    expect(200..209).not_to include(response.code)
+    # expect(200..209).not_to include(response.code)
     matches = users.find_all { |u| u[:email] == email }
     expect(matches.size).to be <= (1), 'found more than one user with same email'
     # BUG: uniqueness of email is not checcked, duplicate email user gets added anyway
@@ -120,8 +120,8 @@ describe 'users api endpoint' do
 
     users = get_users
     match = users.find { |u| u[:id] == orig_user[:id] }
-    expect(match[:email]).not_to eq (new_user[:email]), 'user with original id has different email'
-    expect(match[:created]).to eq (orig_user[:created]), 'user with original id has different created date'
+    expect(match[:email]).not_to eq(new_user[:email]), 'user with original id has different email'
+    expect(match[:created]).to eq(orig_user[:created]), 'user with original id has different created date'
 
     # BUG: it overrides the user with the same name (therefore the same id)
   end
@@ -133,9 +133,14 @@ describe 'users api endpoint' do
     user = {id: user[:id], email: user[:email], firstName: 'donald', lastName: 'duck'}
     puts user
 
-    put endpt, user
-    expect(response.code).to be(201)
-    expect(json_body).to eq(user), json_body
+    put "#{endpt}/#{user[:id]}", user
+    expect(response.code).to be (201)
+
+    # find the updated user
+    users = get_users
+    expect(users).to include(a_hash_including(firstName: 'donald', lastName: 'duck'))
+    match = users.find { |user| user >= {firstName: 'donald', lastName: 'duck'} }
+    expect(match[:id]).to eq(user[:id]), 'did not modify correct user?'
   end
 
   it 'should update user with new email' do
@@ -143,43 +148,72 @@ describe 'users api endpoint' do
     user = {id: user[:id], email: 'donald.duck@disney.mail', firstName: user[:firstName], lastName: user[:lastName]}
     puts user
 
-    put endpt, user
-    expect(response.code).to be(201)
-    expect(json_body).to eq(user), json_body
+    put "#{endpt}/#{user[:id]}", user
+    expect(response.code).to be (201)
+
+    # find the updated user
+    users = get_users
+    expect(users).to include(a_hash_including(email: 'donald.duck@disney.mail'))
+    match = users.find { |user| user >= {email: 'donald.duck@disney.mail'} }
+    expect(match[:id]).to eq(user[:id]), 'did not modify correct user?'
   end
 
   it 'should reject update using existing email of another user' do
     users = get_users
-    user = users[0]
-    user = {id: user[:id], email: users[1][:email], firstName: user[:firstName], lastName: user[:lastName]}
-    puts user
+    user_one = users[0]
+    user_two = users[1]
+    new_user = {id: user_one[:id], email: user_two[:email], firstName: user_one[:firstName], lastName: user_one[:lastName]}
+    puts new_user
 
-    put endpt, user
-    expect(response.code).to be(404)
+    put "#{endpt}/#{user_one[:id]}", new_user
+    # expect(response.code).to be (400), 'should not allow update with email of another user'
+
+    users = get_users
+
+    matches = users.find { |u| u[:email] == user_two[:email] }
+    expect(matches.size).to eq(1), 'duplicate emails found'
+
+    match = users.find { |u| u[:id] == user_one[:id] }
+    expect(match[:email]).not_to eq(user_two[:email]), 'user has same email as another'
   end
 
-  it 'update user without required fields' do
+  it 'should reject update user without required fields' do
     user = get_users[0]
-    puts user[:id]
 
-    put endpt, {id: user[:id]}
-    expect(response.code).to be(404)
+    put "#{endpt}/#{user[:id]}", {id: user[:id]}
+    # expect(response.code).not_to be (201)
+
+    users = get_users
+
+    match = users.find { |u| u[:id] == user[:id] }
+    expect(match).to include(:id, :firstName, :lastName, :email)
+
+    # BUG: the update is accepted and now the user doesn't have the other required fields - first/last name and email
   end
 
-  it 'update user without id' do
+  it 'update user without specifying id in url' do
     user = get_users[0]
     user.delete(:id)
     puts user
 
     put endpt, user
-    expect(response.code).to be(404)
+    expect(response.code).to be (404)
+  end
+
+  it 'update user without id in body' do
+    user = get_users[0]
+    user.delete(:id)
+    puts user
+
+    put "#{endpt}/#{user[:id]}", user
+    expect(response.code).to be (404)
   end
 
   it 'update nonexisting user' do
     user = get_users[0]
 
-    put endpt, {id: 'apple'}
-    expect(response.code).to be(404)
+    put "#{endpt}/apple", {id: 'apple'}
+    expect(response.code).to be (404)
   end
 
 end
