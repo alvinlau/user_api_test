@@ -46,6 +46,7 @@ describe 'users api endpoint' do
     get "#{endpt}/#{user[:id]}"
     expect(json_body).to eq(user)
     # BUG: the type for lastLogin is different
+    # BUG: rename isactive to isActive?
   end
 
   it 'ignore additional url parameters' do
@@ -83,16 +84,19 @@ describe 'users api endpoint' do
     expect(match).to be >= (expected), 'user does not have matching email'
     # check the generated fields are present
     expect(match).to include(:lastLogin, :created, :id, :isactive)
-    # BUG: rename isactive to isActive?
-    # BUG: last login should be integer...
     # BUG: created date format is different...
   end
 
   it 'add user without required fields' do
     post endpt, {apple: 'orange'}
     # BUG: improvement: should tell user what to add
-    puts body
     expect(response.code).to be(400), 'unexpected response code'
+  end
+
+  it 'add user with only first name' do
+    post endpt, {firstName: 'mickey', email: 'mickey.mouse@disney.mail'}
+    expect(response.code).to eq(400)
+    # BUG: 500 error
   end
 
   it 'add user with same email as existing user' do
