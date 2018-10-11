@@ -10,6 +10,7 @@ describe 'users api endpoint' do
     json_body
   end
 
+  # reset the users collection before each test
   before(:each) do
     post "#{endpt}/reset"
   end
@@ -33,7 +34,7 @@ describe 'users api endpoint' do
 
   it 'should get users' do
     users = get_users
-    puts users
+    expect(users.size).to be > 0
     user = users[0]
     expect(user).to include(:id, :firstName, :lastName, :email)
   end
@@ -84,6 +85,7 @@ describe 'users api endpoint' do
     expect(match).to include(:lastLogin, :created, :id, :isactive)
     # BUG: rename isactive to isActive?
     # BUG: last login should be integer...
+    # BUG: created date format is different...
   end
 
   it 'add user without required fields' do
@@ -93,27 +95,67 @@ describe 'users api endpoint' do
     expect(response.code).to be(400), 'unexpected response code'
   end
 
-  it 'add user with same email as another user' do
+  it 'add user with same email as existing user' do
+    user = get_users[0]
+    email = user[:email]
 
+    user = {firstName: 'steve', lastName: 'jobs', email: email}
+    puts user
+
+    post endpt, user
+
+    users = get_users
+    expect(200..209).not_to include(response.code)
+    matches = users.find_all { |u| u[:email] == email }
+    expect(matches.size).to be <= (1), 'found more than one user with same email'
+    # BUG: uniqueness of email is not checcked, duplicate email user gets added anyway
   end
 
-  it 'should reject adding user with same name' do
+  it 'should handle adding user with same name as existing user' do
+    orig_user = get_users[0]
+    puts orig_user
+    new_user = {firstName: orig_user[:firstName], lastName: orig_user[:lastName], email: 'new@email.com'}
 
+    post endpt, new_user
+
+    users = get_users
+    match = users.find { |u| u[:id] == orig_user[:id] }
+    expect(match[:email]).not_to eq (new_user[:email]), 'user with original id has different email'
+    expect(match[:created]).to eq (orig_user[:created]), 'user with original id has different created date'
+
+    # BUG: it overrides the user with the same name (therefore the same id)
   end
 
   ## PUT endpoint
 
-  it 'should update user with required fields' do
+  it 'should update user with new name' do
     user = get_users[0]
-    puts user[:id]
-
-    user[:firstName] = 'donald'
-    user[:lastName] = 'duck'
+    user = {id: user[:id], email: user[:email], firstName: 'donald', lastName: 'duck'}
+    puts user
 
     put endpt, user
     expect(response.code).to be(201)
+    expect(json_body).to eq(user), json_body
+  end
 
-    # check the updated fields
+  it 'should update user with new email' do
+    user = get_users[0]
+    user = {id: user[:id], email: 'donald.duck@disney.mail', firstName: user[:firstName], lastName: user[:lastName]}
+    puts user
+
+    put endpt, user
+    expect(response.code).to be(201)
+    expect(json_body).to eq(user), json_body
+  end
+
+  it 'should reject update using existing email of another user' do
+    users = get_users
+    user = users[0]
+    user = {id: user[:id], email: users[1][:email], firstName: user[:firstName], lastName: user[:lastName]}
+    puts user
+
+    put endpt, user
+    expect(response.code).to be(404)
   end
 
   it 'update user without required fields' do
@@ -130,14 +172,14 @@ describe 'users api endpoint' do
     puts user
 
     put endpt, user
-    expect(response.code).to be(400)
+    expect(response.code).to be(404)
   end
 
   it 'update nonexisting user' do
     user = get_users[0]
 
     put endpt, {id: 'apple'}
-    expect(response.code).to be(400)
+    expect(response.code).to be(404)
   end
 
 end
