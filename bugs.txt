@@ -1,0 +1,89 @@
+Updating user with only id are not rejected without checking for required fields
+
+Example
+Assume user exists as
+{
+    "firstName": "Thomas",
+    "lastName": "Brown",
+    "id": "thomasbrown",
+    "isactive": true,
+    "created": "2017-05-14T11:35:10 PST",
+    "lastLogin": 1507670749666,
+    "email": "t.brown@company.com"
+}
+
+Do request
+- PUT /users/thomasbrown
+- body: {"id": "thomasbrown"}
+
+Expected
+- request should return with response code 400 and appropriate error message (required fields: id, firstName, lastName, email)
+- user record should stay the same
+
+Actual
+user record was changed to
+{
+    "id": "thomasbrown",
+    "isactive": true,
+    "created": "2017-05-14T11:35:10 PST",
+    "lastLogin": 1507670749666
+}
+
+
+
+
+Adding new user with same email as existing user is allowed, uniqueness is not checked
+
+Example
+Assume user exists as
+{
+    "firstName": "Thomas",
+    "lastName": "Brown",
+    "id": "thomasbrown",
+    "isactive": true,
+    "created": "2017-05-14T11:35:10 PST",
+    "lastLogin": 1507670749666,
+    "email": "t.brown@company.com"
+}
+
+Do request
+- POST /users
+- body:
+{
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "t.brown@company.com"
+}
+
+Expected
+- request should return with response code 400 and appropriate error message (required fields: id, firstName, lastName, email)
+- user record should stay the same
+
+Actual
+two records with the same email exists, the original one remains the same but the new one created for Jane Doe would be
+{
+    "id": "janedoe",
+    "lastLogin": 0,
+    "isactive": false,
+    "created": "118-9-4T14:32:05 PST",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "t.brown@company.com"
+}
+
+
+
+
+Other list of bugs:
+GET endpoint
+- the type of the field lastLogin is different between the call to get all users, and the call to get one user.  In the get all call, it is a string, but in the get one user call, it is a number
+- when trying to call get using an nonexisting user id (e.g. orange), the response code is 405 whereas I would expect 404 for not found
+- minor nitpick: rename the field isactive to isActive? just to be consistent with the other camelCase field names
+POST endpoint
+- the date format for a newly added user is different from those of the existing users from a get all users call. e.g. the post call returns "created": "118-9-4T14:32:05 PST", while the get call returns "2017-05-14T11:35:10 PST"
+- when attempting to add a user without any required fields, a simple 400 error response with body is returned, we should describe what the required fields are in the response message ideally
+- adding a user with only first name and email (missing last name) generates a 500 error
+- adding a user with same email as existing user is allowed by mistake, it adds the user anyway and now two users have the same email
+- since user ids seem to be based on their name, adding a user with the same first and last name as existing user (todo: need to test case sensitivity as well), will actually override existing user record with the same id
+PUT endpoint
+- updating a user without all the required fields still gets accepted, after that the updated record only has the fields submitted with missing required fields, e.g. only the user id is provided
